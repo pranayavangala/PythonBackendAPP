@@ -24,7 +24,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "https://nirnayaflorals.vercel.app/",
+        "https://shop-flowers-here.vercel.app/",
     ],
     allow_credentials=True,
     allow_methods=["*"],
