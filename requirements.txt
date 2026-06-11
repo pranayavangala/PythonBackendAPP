@@ -1,0 +1,755 @@
+fastapi
+uvicorn
+sqlalchemy
+pymysql
+cryptography
+python-jose
+passlib[bcrypt]
+python-dotenv
+pytest
+
+====# This is a requirements file for a Python backend application. It lists the dependencies needed to run the application.
+
+Python Backend Project Documentation
+Project Name
+PythonBackendApp
+
+Project Summary
+This project is a FastAPI backend application connected with MySQL database using SQLAlchemy ORM.
+
+It includes:
+
+
+REST APIs
+MySQL database connection
+SQLAlchemy models
+User registration
+Login API
+JWT authentication
+Protected APIs
+CRUD operations
+Pytest unit testing
+Swagger API documentation
+Prerequisites
+Install these before starting:
+
+1. Python
+Install Python 3.10 or above.
+
+Check version:
+
+Bash
+===============
+python --version
+
+2. PyCharm
+Use PyCharm Community or Professional.
+
+3. MySQL Server
+Install MySQL Server.
+
+4. MySQL Workbench
+Used to view database, tables, and records.
+
+5. Postman Optional
+Swagger is already available, but Postman can also be used for API testing.
+
+Project Structure
+
+PythonBackendApp
+│
+├── app
+│   ├── __init__.py
+│   ├── main.py
+│   ├── database.py
+│   ├── models.py
+│   ├── schemas.py
+│   ├── routes.py
+│   └── auth.py
+│
+├── tests
+│   ├── __init__.py
+│   └── test_api.py
+│
+├── requirements.txt
+├── .env
+└── README.md
+
+
+Install Packages
+Create virtual environment
+
+Bash
+====
+python -m venv venv
+
+Activate virtual environment
+Windows
+
+Bash
+=====
+venv\Scripts\activate
+Mac/Linux
+Bash
+
+source venv/bin/activate
+Install packages
+Bash
+
+pip install fastapi
+pip install uvicorn
+pip install sqlalchemy
+pip install pymysql
+pip install cryptography
+pip install python-jose
+pip install passlib
+pip install bcrypt==4.0.1
+pip install email-validator
+pip install pytest
+pip install python-dotenv
+
+Bash
+====
+pip freeze > requirements.txt
+MySQL Setup
+Open MySQL Workbench and run:
+
+SQL
+
+CREATE DATABASE crmdb;
+Use database:
+
+SQL
+
+USE crmdb;
+Check database:
+
+SQL
+
+SHOW DATABASES;
+Phase 1: FastAPI + MySQL + SQLAlchemy Setup
+app/database.py
+Python
+
+Run
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+
+DATABASE_URL = "mysql+pymysql://root:root@localhost:3306/crmdb"
+
+engine = create_engine(DATABASE_URL)
+
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
+
+Base = declarative_base()
+app/models.py
+Python
+
+
+Run
+from sqlalchemy import Column, Integer, String
+from app.database import Base
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    password = Column(String(255), nullable=False)
+app/main.py
+Python
+
+
+Run
+from fastapi import FastAPI
+from app.database import engine
+from app.models import Base
+from app.routes import router
+
+app = FastAPI(
+    title="Python Backend App",
+    description="FastAPI + MySQL + SQLAlchemy project",
+    version="1.0.0"
+)
+
+Base.metadata.create_all(bind=engine)
+
+app.include_router(router)
+
+@app.get("/")
+def home():
+    return {
+        "message": "FastAPI application is running successfully"
+    }
+Run app
+Bash
+
+uvicorn app.main:app --reload
+Open:
+
+
+http://127.0.0.1:8000/docs
+Verify table in MySQL
+SQL
+
+USE crmdb;
+
+SHOW TABLES;
+
+DESC users;
+Phase 2: User Registration API
+app/schemas.py
+Python
+
+
+Run
+from pydantic import BaseModel, EmailStr
+
+class UserCreate(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+
+class UserResponse(BaseModel):
+    id: int
+    name: str
+    email: EmailStr
+
+    class Config:
+        from_attributes = True
+app/routes.py
+Python
+
+
+Run
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from passlib.context import CryptContext
+
+from app.database import SessionLocal
+from app.models import User
+from app.schemas import UserCreate, UserResponse
+
+router = APIRouter()
+
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto"
+)
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@router.post("/register", response_model=UserResponse)
+def register_user(user: UserCreate, db: Session = Depends(get_db)):
+
+    existing_user = db.query(User).filter(
+        User.email == user.email
+    ).first()
+
+    if existing_user:
+        raise HTTPException(
+            status_code=400,
+            detail="Email already registered"
+        )
+
+    hashed_password = pwd_context.hash(user.password)
+
+    new_user = User(
+        name=user.name,
+        email=user.email,
+        password=hashed_password
+    )
+
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return new_user
+Test Register API
+Swagger:
+
+
+POST /register
+Request:
+
+JSON
+
+{
+  "name": "Pranaya",
+  "email": "pranaya@gmail.com",
+  "password": "test123"
+}
+Response:
+
+JSON
+
+{
+  "id": 1,
+  "name": "Pranaya",
+  "email": "pranaya@gmail.com"
+}
+Check MySQL:
+
+SQL
+
+USE crmdb;
+
+SELECT * FROM users;
+Phase 3: Login API with JWT Token
+app/auth.py
+Python
+
+
+Run
+from datetime import datetime, timedelta
+from jose import jwt, JWTError
+from fastapi import Depends, HTTPException
+from fastapi.security import OAuth2PasswordBearer
+from passlib.context import CryptContext
+
+SECRET_KEY = "mysecretkey123"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto"
+)
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(
+        plain_password,
+        hashed_password
+    )
+
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+
+    expire = datetime.utcnow() + timedelta(
+        minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+    )
+
+    to_encode.update({"exp": expire})
+
+    encoded_jwt = jwt.encode(
+        to_encode,
+        SECRET_KEY,
+        algorithm=ALGORITHM
+    )
+
+    return encoded_jwt
+
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        email = payload.get("sub")
+
+        if email is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token"
+            )
+
+        return email
+
+    except JWTError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token"
+        )
+Update app/schemas.py
+Python
+
+
+Run
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+Add Login API in routes.py
+Python
+
+
+Run
+from app.schemas import UserCreate, UserResponse, UserLogin, TokenResponse
+from app.auth import verify_password, create_access_token
+Python
+
+
+Run
+@router.post("/login", response_model=TokenResponse)
+def login_user(user: UserLogin, db: Session = Depends(get_db)):
+
+    existing_user = db.query(User).filter(
+        User.email == user.email
+    ).first()
+
+    if not existing_user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password"
+        )
+
+    if not verify_password(user.password, existing_user.password):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password"
+        )
+
+    access_token = create_access_token(
+        data={"sub": existing_user.email}
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
+Test Login API
+Swagger:
+
+
+POST /login
+Request:
+
+JSON
+
+{
+  "email": "pranaya@gmail.com",
+  "password": "test123"
+}
+Response:
+
+JSON
+
+{
+  "access_token": "jwt_token_here",
+  "token_type": "bearer"
+}
+Phase 4: CRUD APIs
+Add schema
+Python
+
+
+Run
+class UserUpdate(BaseModel):
+    name: str
+    email: EmailStr
+Add imports
+Python
+
+
+Run
+from app.schemas import UserCreate, UserResponse, UserLogin, TokenResponse, UserUpdate
+GET all users
+Python
+
+
+Run
+@router.get("/users", response_model=list[UserResponse])
+def get_users(db: Session = Depends(get_db)):
+    return db.query(User).all()
+GET user by ID
+Python
+
+
+Run
+@router.get("/users/{user_id}", response_model=UserResponse)
+def get_user(user_id: int, db: Session = Depends(get_db)):
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    return user
+UPDATE user
+Python
+
+
+Run
+@router.put("/users/{user_id}", response_model=UserResponse)
+def update_user(
+    user_id: int,
+    user_data: UserUpdate,
+    db: Session = Depends(get_db)
+):
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    user.name = user_data.name
+    user.email = user_data.email
+
+    db.commit()
+    db.refresh(user)
+
+    return user
+DELETE user
+Python
+
+
+Run
+@router.delete("/users/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(get_db)):
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    db.delete(user)
+    db.commit()
+
+    return {
+        "message": "User deleted successfully"
+    }
+Phase 5: Protect APIs Using JWT Token
+Import protected dependency
+Python
+
+
+Run
+from app.auth import get_current_user
+Protected GET users
+Python
+
+
+Run
+@router.get("/users", response_model=list[UserResponse])
+def get_users(
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    return db.query(User).all()
+Protected GET user by ID
+Python
+
+
+Run
+@router.get("/users/{user_id}", response_model=UserResponse)
+def get_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    return user
+Protected UPDATE user
+Python
+
+
+Run
+@router.put("/users/{user_id}", response_model=UserResponse)
+def update_user(
+    user_id: int,
+    user_data: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    user.name = user_data.name
+    user.email = user_data.email
+
+    db.commit()
+    db.refresh(user)
+
+    return user
+Protected DELETE user
+Python
+
+
+Run
+@router.delete("/users/{user_id}")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    db.delete(user)
+    db.commit()
+
+    return {
+        "message": "User deleted successfully"
+    }
+Test Protected API
+First login:
+
+JSON
+
+{
+  "email": "pranaya@gmail.com",
+  "password": "test123"
+}
+Copy token.
+
+In Swagger click:
+
+
+Authorize
+Paste:
+
+
+Bearer your_token_here
+Then test:
+
+
+GET /users
+Phase 6: Pytest Unit Tests
+tests/test_api.py
+Python
+
+
+Run
+from fastapi.testclient import TestClient
+from app.main import app
+
+client = TestClient(app)
+
+
+def test_home():
+    response = client.get("/")
+    assert response.status_code == 200
+
+
+def test_register_user():
+    response = client.post(
+        "/register",
+        json={
+            "name": "Test User",
+            "email": "testuser1@gmail.com",
+            "password": "test123"
+        }
+    )
+
+    assert response.status_code in [200, 400]
+
+
+def test_login_user():
+    response = client.post(
+        "/login",
+        json={
+            "email": "testuser1@gmail.com",
+            "password": "test123"
+        }
+    )
+
+    assert response.status_code == 200
+    assert "access_token" in response.json()
+
+
+def test_get_users_with_token():
+    login_response = client.post(
+        "/login",
+        json={
+            "email": "testuser1@gmail.com",
+            "password": "test123"
+        }
+    )
+
+    token = login_response.json()["access_token"]
+
+    response = client.get(
+        "/users",
+        headers={
+            "Authorization": f"Bearer {token}"
+        }
+    )
+
+    assert response.status_code == 200
+Run tests
+Bash
+
+pytest
+Expected:
+
+
+4 passed
+Final API List
+
+GET     /
+POST    /register
+POST    /login
+GET     /users
+GET     /users/{user_id}
+PUT     /users/{user_id}
+DELETE  /users/{user_id}
+Run Project
+Bash
+
+uvicorn app.main:app --reload
+Swagger:
+
+
+http://127.0.0.1:8000/docs
+
+
+Interview Explanation
+==========================
+
+I developed a Python backend REST API project using FastAPI and MySQL.
+I used SQLAlchemy ORM for database modeling and queries.
+I implemented user registration, login, JWT-based authentication, protected APIs, CRUD operations, and unit testing using pytest.
+I also used Swagger documentation to test APIs and MySQL Workbench to verify backend data.
+
+
+
