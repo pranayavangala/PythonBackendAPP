@@ -197,7 +197,7 @@ def upload_image(file: UploadFile = File(...)):
     return {
         "message": "Image uploaded successfully",
         "filename": file.filename,
-        "url": f"http://localhost:8000/uploads/{file.filename}"
+        "url": f"/uploads/{file.filename}"
     }
 
 @router.put("/flowers/{flower_id}",
