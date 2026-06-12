@@ -6,6 +6,7 @@ from app.database import engine
 from app.models import Base
 from app.routes import router
 
+
 app = FastAPI(
     title="Python Backend App",
     description="FastAPI + SQLAlchemy project",
@@ -32,6 +33,12 @@ Base.metadata.create_all(bind=engine)
 
 app.include_router(router)
 
+try:
+    from app.seed import *
+except Exception as e:
+    print(e)
+
+app.include_router(router)
 
 @app.get("/")
 def home():
