@@ -8,8 +8,8 @@ from app.routes import router
 
 
 app = FastAPI(
-    title="Python Backend App",
-    description="Developed by Pranaya Reddy using FastAPI + SQLAlchemy project",
+    title="Python Backend App by Pranaya Reddy",
+    description="FastAPI + SQLAlchemy project",
     version="1.0.0",
 )
 
